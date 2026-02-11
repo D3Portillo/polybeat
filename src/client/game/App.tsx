@@ -92,12 +92,14 @@ export const App = () => {
   const [isSuccessFlash, setIsSuccessFlash] = useState(false);
   const [trackBand, setTrackBand] = useState<Band>(initialBand);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
+  const [isHittable, setIsHittable] = useState(false);
 
   const expectedShapeRef = useRef<HTMLDivElement | SVGSVGElement | null>(null);
   const lastTapTimeRef = useRef(0);
   const trackBandRef = useRef<Band>(initialBand);
   const feedbackTimeoutRef = useRef<number | null>(null);
   const shakeLayerRef = useRef<HTMLDivElement>(null);
+  const isHittableRef = useRef(false);
   const bandEnergyRef = useRef<Record<Band, { avg: number; last: number; lastTrigger: number }>>({
     bass: { avg: 0, last: 0, lastTrigger: -BAND_COOLDOWN_MS },
     mid: { avg: 0, last: 0, lastTrigger: -BAND_COOLDOWN_MS },
@@ -597,6 +599,14 @@ export const App = () => {
 
     const update = () => {
       const currentTime = audio.currentTime * 1000;
+      const { hitCenterY, hitboxRadius, hitTop } = getHitboxMetrics();
+      const noteRadius = NOTE_SIZE / 2;
+      const requiredOverlap = NOTE_SIZE * 0.4;
+      const maxCenterDistance = hitboxRadius + noteRadius - requiredOverlap;
+      const extraBottomAllowance = hitboxRadius * 0.5;
+      const entrySlack = NOTE_SIZE * 0.1;
+      const topTighten = hitboxRadius * 0.25;
+      let hittableNow = false;
 
       const { h, s, l } = getColorFromAudio();
       document.documentElement.style.setProperty('--h', h.toString());
@@ -642,17 +652,22 @@ export const App = () => {
           continue;
         }
 
-        const { hitCenterY, hitboxRadius, hitTop } = getHitboxMetrics();
-        const noteRadius = NOTE_SIZE / 2;
-        const requiredOverlap = NOTE_SIZE * 0.4;
-        const maxCenterDistance = hitboxRadius + noteRadius - requiredOverlap;
-        const extraBottomAllowance = hitboxRadius * 0.5;
         const noteCenterY = y + noteRadius;
         const noteBottomY = y + NOTE_SIZE;
         const distanceFromHit = Math.abs(noteCenterY - hitCenterY);
         const allowedDistance =
           noteCenterY > hitCenterY ? maxCenterDistance + extraBottomAllowance : maxCenterDistance;
-        const entrySlack = NOTE_SIZE * 0.1;
+        const timeDiff = Math.abs(currentTime - note.hitTime);
+
+        if (
+          !hittableNow &&
+          timeDiff <= HIT_WINDOW_MS &&
+          distanceFromHit <= allowedDistance &&
+          noteBottomY >= hitTop - entrySlack &&
+          y >= hitTop + topTighten
+        ) {
+          hittableNow = true;
+        }
 
         if (
           currentTime > note.hitTime + HIT_WINDOW_MS &&
@@ -673,6 +688,11 @@ export const App = () => {
         if (note.element) {
           note.element.style.transform = `translateY(${y}px)`;
         }
+      }
+
+      if (hittableNow !== isHittableRef.current) {
+        isHittableRef.current = hittableNow;
+        setIsHittable(hittableNow);
       }
 
       animationRef.current = requestAnimationFrame(update);
@@ -825,6 +845,14 @@ export const App = () => {
                     width: `${STRING_WIDTH}px`,
                     transform: 'translateX(-50%)',
                     backgroundImage: `repeating-linear-gradient(to bottom, rgba(255,255,255,0.45) 0 ${STRING_CHUNK_SIZE}px, rgba(255,255,255,0.18) ${STRING_CHUNK_SIZE}px ${STRING_CHUNK_SIZE * 2}px)`,
+                    maskImage:
+                      key === 'center'
+                        ? `linear-gradient(to top, transparent 0 ${STRING_CHUNK_SIZE * 1.5}px, black ${STRING_CHUNK_SIZE * 1.5}px)`
+                        : 'none',
+                    WebkitMaskImage:
+                      key === 'center'
+                        ? `linear-gradient(to top, transparent 0 ${STRING_CHUNK_SIZE * 1.5}px, black ${STRING_CHUNK_SIZE * 1.5}px)`
+                        : 'none',
                     boxShadow: '0 0 14px rgba(255,255,255,0.55), 0 0 28px rgba(255,255,255,0.35)',
                   }}
                 />
@@ -850,16 +878,14 @@ export const App = () => {
             className="group-active:scale-95 z-1 absolute left-1/2 -translate-x-1/2"
           >
             <div
-              className="backdrop-blur"
               style={{
                 width: `${EXPECTED_SHAPE_SIZE}px`,
                 height: `${EXPECTED_SHAPE_SIZE}px`,
-                backgroundColor: 'rgba(0, 0, 0, 0.25)',
+                transform: 'rotateX(15deg)',
+                backgroundColor: isHittable ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.1)',
                 borderRadius: activeShape === 'circle' ? '50%' : '8px',
                 clipPath:
-                  activeShape === 'triangle'
-                    ? 'polygon(50% 0%, 0% 100%, 100% 100%)'
-                    : 'none',
+                  activeShape === 'triangle' ? 'polygon(50% 0%, 0% 100%, 100% 100%)' : 'none',
                 filter: 'drop-shadow(0 0 18px rgba(255,255,255,0.65))',
                 transition: 'all 0.15s ease-out',
               }}
