@@ -14,6 +14,7 @@
     "dev:client": "cd src/client && vite build --watch",
     "dev:devvit": "devvit playtest",
     "dev:server": "cd src/server && vite build --watch",
+    "dev:ui": "cd src/client && vite --port 3000 --open /game.html",
     "dev:vite": "cd src/client && vite --port 7474",
     "lint": "eslint ./src",
     "lint:fix": "eslint --fix ./src",
