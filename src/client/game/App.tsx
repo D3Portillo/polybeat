@@ -780,6 +780,23 @@ export const App = () => {
             filter: drop-shadow(0 0 5px hsl(var(--h), var(--s), var(--l)));
           }
         }
+
+        @keyframes trackRun {
+          0%, 100% {
+            transform: translateY(-90%);
+            opacity: 0;
+          }
+          12% {
+            opacity: 1;
+          }
+          55% {
+            opacity: 1;
+          }
+          80% {
+            transform: translateY(90%);
+            opacity: 0;
+          }
+        }
       `}</style>
 
       <div
@@ -802,6 +819,13 @@ export const App = () => {
       />
 
       <div
+        className="absolute z-1 bg-linear-to-b from-black/0 to-black left-0 right-0 bottom-0 pointer-events-none"
+        style={{
+          height: '15vh',
+        }}
+      />
+
+      <div
         className="absolute inset-0 pointer-events-none"
         style={{
           top: '-6%',
@@ -815,7 +839,7 @@ export const App = () => {
           style={{ transformOrigin: '50% 60%' }}
         >
           <div
-            className="absolute pointer-events-none left-1/2 -translate-x-1/2 overflow-hidden"
+            className="absolute pointer-events-none left-1/2 -translate-x-1/2"
             style={{
               width: `${GRID_WIDTH}px`,
               height: '200vh',
@@ -857,6 +881,31 @@ export const App = () => {
                   }}
                 />
               ))}
+
+              <div
+                id="track-highlighter"
+                className="absolute pointer-events-none"
+                style={{
+                  left: '50%',
+                  top: 0,
+                  bottom: 0,
+                  width: '100%',
+                  transform: 'translateX(-50%)',
+                }}
+              >
+                <div
+                  style={{
+                    position: 'absolute',
+                    left: STRING_WIDTH / 2,
+                    right: STRING_WIDTH / 2,
+                    top: '-50%',
+                    height: '150%',
+                    background:
+                      'linear-gradient(to bottom, rgba(255,255,255,0) 0%, rgba(255,255,255,0.06) 30%, rgba(255,255,255,0.30) 45%, rgba(255,255,255,0.30) 55%, rgba(255,255,255,0.06) 70%, rgba(255,255,255,0) 100%)',
+                    animation: 'trackRun 1333ms linear infinite',
+                  }}
+                />
+              </div>
             </div>
           </div>
 
