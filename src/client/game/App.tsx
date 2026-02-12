@@ -37,7 +37,7 @@ interface GameState {
   lastShapeChangeTime: number;
 }
 
-const HIT_WINDOW_MS = 420; // More lenient timing
+const HIT_WINDOW_MS = 480; // More lenient timing
 const NOTE_SIZE = 60;
 const EXPECTED_SHAPE_SIZE = 100; // Much larger hitbox area
 const HIT_CENTER_BIAS = 0;
@@ -48,6 +48,7 @@ const STRING_CHUNK_SIZE = NOTE_SIZE * 2;
 const STRING_WIDTH = 3;
 const GRID_WIDTH = TRACK_WIDTH * 3;
 const TRAVEL_TIME = 2000;
+const CONTAINER_TRANSLATE_Y_RATIO = -0.25;
 const BPM = 120;
 const TICK_INTERVAL = 60000 / BPM / 4; // 16th note intervals for more rhythmic spawning
 const MIN_SILENCE_GAP = 250; // Minimum ms between notes
@@ -71,6 +72,8 @@ export const App = () => {
   const initialBand = AVAILABLE_BANDS[Math.floor(Math.random() * AVAILABLE_BANDS.length)] ?? 'bass';
   const containerRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
+  const errorAudioRef = useRef<HTMLAudioElement>(null);
+  const successAudioRef = useRef<HTMLAudioElement>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const stateRef = useRef<GameState>({
@@ -93,11 +96,13 @@ export const App = () => {
   const [trackBand, setTrackBand] = useState<Band>(initialBand);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [isHittable, setIsHittable] = useState(false);
+  const [isKeyboardTap, setIsKeyboardTap] = useState(false);
 
   const expectedShapeRef = useRef<HTMLDivElement | SVGSVGElement | null>(null);
   const lastTapTimeRef = useRef(0);
   const trackBandRef = useRef<Band>(initialBand);
   const feedbackTimeoutRef = useRef<number | null>(null);
+  const keyTapTimeoutRef = useRef<number | null>(null);
   const shakeLayerRef = useRef<HTMLDivElement>(null);
   const isHittableRef = useRef(false);
   const bandEnergyRef = useRef<Record<Band, { avg: number; last: number; lastTrigger: number }>>({
@@ -130,6 +135,12 @@ export const App = () => {
     const missWord = missWords[Math.floor(Math.random() * missWords.length)] ?? 'Miss';
     triggerFeedback('miss', missWord);
 
+    const errorAudio = errorAudioRef.current;
+    if (errorAudio) {
+      errorAudio.currentTime = 0;
+      void errorAudio.play().catch(() => undefined);
+    }
+
     if (shakeLayerRef.current) {
       shakeLayerRef.current.animate(
         [
@@ -150,6 +161,7 @@ export const App = () => {
     if (!audio) return;
 
     try {
+      audio.volume = 0.5;
       // Ensure audio context is ready
       if (audioContextRef.current?.state === 'suspended') {
         await audioContextRef.current.resume();
@@ -239,10 +251,12 @@ export const App = () => {
     const getNotePosition = (note: Note, currentTime: number): number => {
       const elapsed = currentTime - note.spawnTime;
       const screenHeight = window.innerHeight;
+      const containerHeight = container?.offsetHeight ?? screenHeight;
+      const containerShift = containerHeight * CONTAINER_TRANSLATE_Y_RATIO;
       const hitCenterY = screenHeight - HIT_ZONE_OFFSET - EXPECTED_SHAPE_SIZE / 2 - HIT_CENTER_BIAS;
       const offScreenCenterY = screenHeight + NOTE_SIZE + 100; // Full screen + note size + buffer
 
-      const startTopY = -NOTE_SIZE - 20; // Start slightly above the screen
+      const startTopY = -NOTE_SIZE - 320; // Start further above the screen
       const startCenterY = startTopY + NOTE_SIZE / 2;
 
       const totalDistance = offScreenCenterY - startCenterY;
@@ -250,11 +264,11 @@ export const App = () => {
       const hitProgress = Math.max(0.01, Math.min(0.99, hitDistance / totalDistance));
       const totalTravelTime = note.travelTime / hitProgress;
 
-      if (elapsed <= 0) return startTopY;
+      if (elapsed <= 0) return startTopY - containerShift;
 
       const progress = Math.min(1, elapsed / totalTravelTime);
       const centerY = startCenterY + progress * totalDistance;
-      return centerY - NOTE_SIZE / 2;
+      return centerY - NOTE_SIZE / 2 - containerShift;
     };
 
     const wouldOverlap = (
@@ -480,17 +494,20 @@ export const App = () => {
 
     const getHitboxMetrics = () => {
       const rect = expectedShapeRef.current?.getBoundingClientRect();
+      const containerHeight = container?.offsetHeight ?? window.innerHeight;
+      const containerShift = containerHeight * CONTAINER_TRANSLATE_Y_RATIO;
       if (rect) {
         return {
-          hitCenterY: rect.top + rect.height / 2,
+          hitCenterY: rect.top + rect.height / 2 - containerShift,
           hitboxRadius: rect.height / 2,
-          hitTop: rect.top,
-          hitBottom: rect.bottom,
+          hitTop: rect.top - containerShift,
+          hitBottom: rect.bottom - containerShift,
         };
       }
 
       const screenHeight = window.innerHeight;
-      const hitCenterY = screenHeight - HIT_ZONE_OFFSET - EXPECTED_SHAPE_SIZE / 2 - HIT_CENTER_BIAS;
+      const hitCenterY =
+        screenHeight - HIT_ZONE_OFFSET - EXPECTED_SHAPE_SIZE / 2 - HIT_CENTER_BIAS - containerShift;
       const hitboxRadius = EXPECTED_SHAPE_SIZE / 2;
       return {
         hitCenterY,
@@ -526,7 +543,9 @@ export const App = () => {
         if (noteTopY < hitTop + topTighten) continue;
         const distanceFromHit = Math.abs(noteCenterY - hitCenterY);
         const allowedDistance =
-          noteCenterY > hitCenterY ? maxCenterDistance + extraBottomAllowance : maxCenterDistance;
+          noteCenterY > hitCenterY
+            ? maxCenterDistance + extraBottomAllowance * 1.15
+            : maxCenterDistance;
         if (distanceFromHit > allowedDistance) continue;
 
         if (timeDiff > HIT_WINDOW_MS) continue;
@@ -546,6 +565,12 @@ export const App = () => {
           state.combo++;
           setScore(state.score);
           setCombo(state.combo);
+
+          const successAudio = successAudioRef.current;
+          if (successAudio) {
+            successAudio.currentTime = 0;
+            void successAudio.play().catch(() => undefined);
+          }
 
           const hitWords = ['Woow', 'Good', 'Nice', 'Perfect'] as const;
           const hitWord = hitWords[Math.floor(Math.random() * hitWords.length)] ?? 'Nice';
@@ -590,6 +615,13 @@ export const App = () => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.code === 'Space' && !event.repeat) {
         event.preventDefault();
+        setIsKeyboardTap(true);
+        if (keyTapTimeoutRef.current) {
+          window.clearTimeout(keyTapTimeoutRef.current);
+        }
+        keyTapTimeoutRef.current = window.setTimeout(() => {
+          setIsKeyboardTap(false);
+        }, 100);
         handleTap();
       }
     };
@@ -656,7 +688,9 @@ export const App = () => {
         const noteBottomY = y + NOTE_SIZE;
         const distanceFromHit = Math.abs(noteCenterY - hitCenterY);
         const allowedDistance =
-          noteCenterY > hitCenterY ? maxCenterDistance + extraBottomAllowance : maxCenterDistance;
+          noteCenterY > hitCenterY
+            ? maxCenterDistance + extraBottomAllowance * 1.15
+            : maxCenterDistance;
         const timeDiff = Math.abs(currentTime - note.hitTime);
 
         if (
@@ -707,6 +741,9 @@ export const App = () => {
       if (feedbackTimeoutRef.current) {
         window.clearTimeout(feedbackTimeoutRef.current);
       }
+      if (keyTapTimeoutRef.current) {
+        window.clearTimeout(keyTapTimeoutRef.current);
+      }
       state.notes.forEach((note) => note.element?.remove());
       state.notes = [];
     };
@@ -716,10 +753,12 @@ export const App = () => {
     <div
       role="button"
       tabIndex={-1}
-      className="fixed select-none group inset-0 bg-black overflow-hidden"
+      className="fixed cursor-pointer select-none group inset-0 bg-black overflow-hidden"
       onClick={!isPlaying ? handleStart : undefined}
     >
       <audio ref={audioRef} src="/music.mp3" preload="auto" />
+      <audio ref={errorAudioRef} src="/error.mp3" preload="auto" />
+      <audio ref={successAudioRef} src="/success.mp3" preload="auto" />
 
       <style>{`
         @keyframes startPulse {
@@ -911,9 +950,12 @@ export const App = () => {
 
           <div
             ref={containerRef}
-            className="absolute pointer-events-none left-1/2 -translate-x-1/2 h-full"
+            id="note-container"
+            className="absolute pointer-events-none left-1/2 -translate-x-1/2"
             style={{
               width: `${TRACK_WIDTH}px`,
+              height: '100%',
+              transform: 'translateY(-25%)',
               color: 'hsl(var(--h), var(--s), var(--l))',
               zIndex: 2,
             }}
@@ -924,14 +966,18 @@ export const App = () => {
             style={{
               bottom: `${HIT_ZONE_OFFSET}px`,
             }}
-            className="group-active:scale-95 z-1 absolute left-1/2 -translate-x-1/2"
+            className={`group-active:scale-95 z-1 absolute left-1/2 -translate-x-1/2 transition-transform duration-100 ${
+              isKeyboardTap ? 'scale-95' : ''
+            }`}
           >
             <div
+              className="group-active:!bg-white/80"
               style={{
                 width: `${EXPECTED_SHAPE_SIZE}px`,
                 height: `${EXPECTED_SHAPE_SIZE}px`,
                 transform: 'rotateX(15deg)',
-                backgroundColor: isHittable ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.1)',
+                backgroundColor:
+                  isHittable || isKeyboardTap ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.1)',
                 borderRadius: activeShape === 'circle' ? '50%' : '8px',
                 clipPath:
                   activeShape === 'triangle' ? 'polygon(50% 0%, 0% 100%, 100% 100%)' : 'none',
@@ -1036,7 +1082,6 @@ export const App = () => {
               style={{
                 animation: 'startPulse 1.6s ease-in-out infinite',
                 padding: '12px 28px',
-                background: 'rgba(0,0,0,0.35)',
                 borderRadius: '16px',
               }}
             >
