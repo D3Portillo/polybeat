@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
+import confetti from 'canvas-confetti';
 
 type Shape = 'circle' | 'square' | 'triangle';
 type Band = 'bass' | 'mid' | 'treble';
@@ -579,6 +580,27 @@ export const App = () => {
           flashTimeoutRef.current = window.setTimeout(() => {
             setIsFlashBang(false);
           }, 160);
+
+          const hitboxRect = expectedShapeRef.current?.getBoundingClientRect();
+          const originX = hitboxRect
+            ? (hitboxRect.left + hitboxRect.width / 2) / window.innerWidth
+            : 0.5;
+          const originY = hitboxRect
+            ? (hitboxRect.top + hitboxRect.height / 2) / window.innerHeight
+            : 0.65;
+
+          confetti({
+            particleCount: 3 + Math.round(Math.random() * 5),
+            spread: 50,
+            startVelocity: 15,
+            gravity: 0,
+            drift: 0,
+            ticks: 25,
+            scalar: 0.9,
+            origin: { x: originX, y: originY },
+            colors: ['#ffffff'],
+            shapes: ['square', 'circle'],
+          });
 
           const successAudio = successAudioRef.current;
           if (successAudio) {
