@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
+import { context } from '@devvit/web/client';
 import confetti from 'canvas-confetti';
 
 type Shape = 'circle' | 'square' | 'triangle';
@@ -184,7 +185,7 @@ export const App = () => {
     if (!audio) return;
 
     try {
-      audio.volume = 0.5;
+      audio.volume = 0.7;
       // Ensure audio context is ready
       if (audioContextRef.current?.state === 'suspended') {
         await audioContextRef.current.resume();
@@ -953,7 +954,7 @@ export const App = () => {
         style={{
           height: '20vh',
           background: 'linear-gradient(to bottom, rgba(0,0,0,0.95), rgba(0,0,0,0))',
-          zIndex: 1,
+          zIndex: 2,
         }}
       />
 
@@ -1159,13 +1160,45 @@ export const App = () => {
         </div>
       </div>
 
-      <div className="absolute z-3 top-4 left-4 text-white">
-        <div className="text-2xl font-bold">Score: {score}</div>
-        <div className="text-xl">Combo: {combo}x</div>
-      </div>
+      <section
+        tabIndex={-1}
+        role="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          e.preventDefault();
+
+          alert('Menu should open here. Mock now');
+        }}
+        className="absolute z-3 flex gap-2 top-4 left-4 text-white"
+      >
+        <button
+          style={{
+            borderColor: 'hsl(var(--h), var(--s), var(--l))',
+            boxShadow:
+              '0 0 8px hsl(var(--h), var(--s), var(--l)), 0.7), 0 0 16px hsl(var(--h), var(--s), var(--l))',
+          }}
+          className="size-12 border-2 pt-1 rounded-full overflow-hidden bg-white grid place-items-center"
+        >
+          <img
+            className="w-full scale-110"
+            src={
+              context?.snoovatar ||
+              'https://i.redd.it/snoovatar/avatars/977f6ca7-59e7-408c-a52c-d87a1f9faada.png'
+            }
+            alt=""
+          />
+        </button>
+
+        <div className="flex flex-col items-start">
+          <div className="text-xl font-bold">{score} XP</div>
+          <div className="text-xs rounded-full font-bold bg-white px-2 py-0.5 text-black">
+            Combo x{combo}
+          </div>
+        </div>
+      </section>
 
       <div className="absolute z-3 top-4 right-4 text-white text-sm opacity-70">
-        Track: {trackBand.toUpperCase()}
+        {trackBand.toUpperCase()}
       </div>
 
       {feedback && (
