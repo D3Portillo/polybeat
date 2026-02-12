@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import { context } from '@devvit/web/client';
 import confetti from 'canvas-confetti';
+import { LifeBar } from './components/LifeBar';
 
 type Shape = 'circle' | 'square' | 'triangle';
 type Band = 'bass' | 'mid' | 'treble';
@@ -92,6 +93,8 @@ export const App = () => {
   });
   const animationRef = useRef<number>(0);
   const lastTickTimeRef = useRef(0);
+  const [energyLevel, setEnergyLevel] = useState(0);
+  const energyLevelRef = useRef(0);
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [score, setScore] = useState(0);
@@ -99,6 +102,8 @@ export const App = () => {
   const [activeShape, setActiveShape] = useState<Shape>(getShapeFromBand(initialBand));
   const [isSuccessFlash, setIsSuccessFlash] = useState(false);
   const [isFlashBang, setIsFlashBang] = useState(false);
+  const [isScorePulsing, setIsScorePulsing] = useState(false);
+  const [isComboPulsing, setIsComboPulsing] = useState(false);
   const [trackBand, setTrackBand] = useState<Band>(initialBand);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [isHittable, setIsHittable] = useState(false);
@@ -110,6 +115,8 @@ export const App = () => {
   const feedbackTimeoutRef = useRef<number | null>(null);
   const keyTapTimeoutRef = useRef<number | null>(null);
   const flashTimeoutRef = useRef<number | null>(null);
+  const scorePulseTimeoutRef = useRef<number | null>(null);
+  const comboPulseTimeoutRef = useRef<number | null>(null);
   const shakeLayerRef = useRef<HTMLDivElement>(null);
   const isHittableRef = useRef(false);
   const bandEnergyRef = useRef<Record<Band, { avg: number; last: number; lastTrigger: number }>>({
@@ -586,11 +593,26 @@ export const App = () => {
 
         if (shapeMatch) {
           closestNote.hit = true;
-          state.score += 100 * (state.combo + 1);
+          state.score += 5 * (state.combo + 1);
           state.combo++;
           setScore(state.score);
           setCombo(state.combo);
           state.hitsSinceLock += 1;
+          setIsScorePulsing(true);
+          if (scorePulseTimeoutRef.current) {
+            window.clearTimeout(scorePulseTimeoutRef.current);
+          }
+          scorePulseTimeoutRef.current = window.setTimeout(() => {
+            setIsScorePulsing(false);
+          }, 230);
+
+          setIsComboPulsing(true);
+          if (comboPulseTimeoutRef.current) {
+            window.clearTimeout(comboPulseTimeoutRef.current);
+          }
+          comboPulseTimeoutRef.current = window.setTimeout(() => {
+            setIsComboPulsing(false);
+          }, 230);
 
           setIsFlashBang(true);
           if (flashTimeoutRef.current) {
@@ -704,6 +726,11 @@ export const App = () => {
       document.documentElement.style.setProperty('--s', `${s}%`);
       document.documentElement.style.setProperty('--l', `${l}%`);
 
+      const currentEnergy = getBandEnergy(trackBandRef.current);
+      const nextEnergy = Math.min(1, Math.max(0, currentEnergy / 255));
+      energyLevelRef.current = energyLevelRef.current * 0.7 + nextEnergy * 0.3;
+      setEnergyLevel(energyLevelRef.current);
+
       // Shape changes are handled on tap only
 
       // Quantized spawning on musical ticks
@@ -806,6 +833,12 @@ export const App = () => {
       if (flashTimeoutRef.current) {
         window.clearTimeout(flashTimeoutRef.current);
       }
+      if (scorePulseTimeoutRef.current) {
+        window.clearTimeout(scorePulseTimeoutRef.current);
+      }
+      if (comboPulseTimeoutRef.current) {
+        window.clearTimeout(comboPulseTimeoutRef.current);
+      }
       state.notes.forEach((note) => note.element?.remove());
       state.notes = [];
     };
@@ -898,6 +931,35 @@ export const App = () => {
             transform: scale(1);
             filter: drop-shadow(0 0 5px hsl(var(--h), var(--s), var(--l)));
           }
+        }
+
+        @keyframes statGlitchPulse {
+          0% {
+            transform: scale(1);
+            text-shadow: none;
+            filter: none;
+          }
+          25% {
+            transform: scale(1.2) translateX(1px);
+            text-shadow: -3px 0 rgba(0,255,0,0.5), 3px 0 rgba(255,0,0,0.5);
+          }
+          45% {
+            transform: scale(1.06) translateX(-1px);
+            filter: saturate(1.5) brightness(1.15);
+          }
+          70% {
+            transform: scale(1.12) translateX(1px);
+            text-shadow: -2px 0 rgba(0,255,0,0.3), 2px 0 rgba(255,0,0,0.3);
+          }
+          100% {
+            transform: scale(1);
+            text-shadow: none;
+            filter: none;
+          }
+        }
+
+        .stat-glitch {
+          animation: statGlitchPulse 220ms ease-out;
         }
 
         @keyframes flashBang {
@@ -1190,15 +1252,23 @@ export const App = () => {
         </button>
 
         <div className="flex flex-col items-start">
-          <div className="text-xl font-bold">{score} XP</div>
-          <div className="text-xs rounded-full font-bold bg-white px-2 py-0.5 text-black">
-            Combo x{combo}
+          <div className={`text-xl font-bold ${isScorePulsing ? 'stat-glitch' : ''}`}>
+            {score} XP
+          </div>
+          <div
+            className={`text-xs rounded-full font-bold bg-white px-2 py-0.5 text-black ${
+              isComboPulsing ? 'stat-glitch' : ''
+            }`}
+          >
+            Combo <span className="scale-125 -mt-1.5 inline-block">x{combo}</span>
           </div>
         </div>
       </section>
 
-      <div className="absolute z-3 top-4 right-4 text-white text-sm opacity-70">
-        {trackBand.toUpperCase()}
+      <div className="absolute text-sm text-white flex gap-2 flex-col items-center z-3 top-4 right-4">
+        <div className="w-10 opacity-70 text-center">{trackBand.toUpperCase()}</div>
+        <LifeBar value={energyLevel} />
+        <div className="font-bold">HP</div>
       </div>
 
       {feedback && (
