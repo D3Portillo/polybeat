@@ -136,18 +136,9 @@ export const App = () => {
     }, 500);
   };
 
-  const triggerMiss = () => {
-    const missWords = ['Miss', 'Nope', 'Oops', 'Early'] as const;
-    const missWord = missWords[Math.floor(Math.random() * missWords.length)] ?? 'Miss';
-    triggerFeedback('miss', missWord);
-
-    const errorAudio = errorAudioRef.current;
-    if (errorAudio) {
-      errorAudio.currentTime = 0;
-      void errorAudio.play().catch(() => undefined);
-    }
-
-    if (shakeLayerRef.current) {
+  const triggerShake = (strength: 'tap' | 'miss') => {
+    if (!shakeLayerRef.current) return;
+    if (strength === 'miss') {
       shakeLayerRef.current.animate(
         [
           { transform: 'translateX(0px) rotateZ(0deg)' },
@@ -159,7 +150,33 @@ export const App = () => {
         ],
         { duration: 260, easing: 'ease-in-out' }
       );
+      return;
     }
+
+    shakeLayerRef.current.animate(
+      [
+        { transform: 'translateX(0px) rotateZ(0deg)' },
+        { transform: 'translateX(-3px) rotateZ(-0.6deg)' },
+        { transform: 'translateX(3px) rotateZ(0.6deg)' },
+        { transform: 'translateX(-2px) rotateZ(-0.3deg)' },
+        { transform: 'translateX(0px) rotateZ(0deg)' },
+      ],
+      { duration: 140, easing: 'ease-out' }
+    );
+  };
+
+  const triggerMiss = () => {
+    const missWords = ['Miss', 'Nope', 'Oops', 'Early'] as const;
+    const missWord = missWords[Math.floor(Math.random() * missWords.length)] ?? 'Miss';
+    triggerFeedback('miss', missWord);
+
+    const errorAudio = errorAudioRef.current;
+    if (errorAudio) {
+      errorAudio.currentTime = 0;
+      void errorAudio.play().catch(() => undefined);
+    }
+
+    triggerShake('miss');
   };
 
   const handleStart = async () => {
@@ -524,6 +541,7 @@ export const App = () => {
     };
 
     const handleTap = () => {
+      triggerShake('miss');
       const currentTime = audio.currentTime * 1000;
       lastTapTimeRef.current = currentTime;
       const activeNotes = state.notes.filter((n) => !n.hit && !n.missed);
@@ -909,6 +927,15 @@ export const App = () => {
             opacity: 0;
           }
         }
+
+        @keyframes stringFlow {
+          0% {
+            transform: translateY(0%);
+          }
+          100% {
+            transform: translateY(33.33%);
+          }
+        }
       `}</style>
 
       <div
@@ -970,29 +997,54 @@ export const App = () => {
                 transformOrigin: '50% 100%',
               }}
             >
-              {(['left', 'center', 'right'] as const).map((key, index) => (
+              <div
+                className="absolute pointer-events-none"
+                style={{
+                  left: '0%',
+                  top: 0,
+                  bottom: 0,
+                  width: `${STRING_WIDTH}px`,
+                  transform: 'translateX(-50%)',
+                  boxShadow: '0 0 16px rgba(255,255,255,0.7), 0 0 30px rgba(255,255,255,0.35)',
+                  overflow: 'hidden',
+                }}
+              >
                 <div
-                  key={key}
                   style={{
                     position: 'absolute',
-                    left: `${(index / 2) * 100}%`,
-                    top: 0,
-                    bottom: 0,
-                    width: `${STRING_WIDTH}px`,
-                    transform: 'translateX(-50%)',
-                    backgroundImage: `repeating-linear-gradient(to bottom, rgba(255,255,255,0.45) 0 ${STRING_CHUNK_SIZE}px, rgba(255,255,255,0.18) ${STRING_CHUNK_SIZE}px ${STRING_CHUNK_SIZE * 2}px)`,
-                    maskImage:
-                      key === 'center'
-                        ? `linear-gradient(to top, transparent 0 ${STRING_CHUNK_SIZE * 1.5}px, black ${STRING_CHUNK_SIZE * 1.5}px)`
-                        : 'none',
-                    WebkitMaskImage:
-                      key === 'center'
-                        ? `linear-gradient(to top, transparent 0 ${STRING_CHUNK_SIZE * 1.5}px, black ${STRING_CHUNK_SIZE * 1.5}px)`
-                        : 'none',
-                    boxShadow: '0 0 14px rgba(255,255,255,0.55), 0 0 28px rgba(255,255,255,0.35)',
+                    left: 0,
+                    right: 0,
+                    top: '-100%',
+                    height: '300%',
+                    backgroundImage: `repeating-linear-gradient(to top, rgba(255,255,255,0.65) 0 ${STRING_CHUNK_SIZE * 1.6}px, rgba(255,255,255,0.3) ${STRING_CHUNK_SIZE * 1.6}px ${STRING_CHUNK_SIZE * 3.2}px)`,
+                    animation: 'stringFlow 1.35s linear infinite',
                   }}
                 />
-              ))}
+              </div>
+              <div
+                className="absolute pointer-events-none"
+                style={{
+                  left: '100%',
+                  top: 0,
+                  bottom: 0,
+                  width: `${STRING_WIDTH}px`,
+                  transform: 'translateX(-50%)',
+                  boxShadow: '0 0 16px rgba(255,255,255,0.7), 0 0 30px rgba(255,255,255,0.35)',
+                  overflow: 'hidden',
+                }}
+              >
+                <div
+                  style={{
+                    position: 'absolute',
+                    left: 0,
+                    right: 0,
+                    top: '-100%',
+                    height: '300%',
+                    backgroundImage: `repeating-linear-gradient(to top, rgba(255,255,255,0.65) 0 ${STRING_CHUNK_SIZE * 1.6}px, rgba(255,255,255,0.3) ${STRING_CHUNK_SIZE * 1.6}px ${STRING_CHUNK_SIZE * 3.2}px)`,
+                    animation: 'stringFlow 1.35s linear infinite',
+                  }}
+                />
+              </div>
 
               <div
                 id="track-highlighter"
