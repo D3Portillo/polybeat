@@ -96,6 +96,7 @@ export const App = () => {
   const [combo, setCombo] = useState(0);
   const [activeShape, setActiveShape] = useState<Shape>(getShapeFromBand(initialBand));
   const [isSuccessFlash, setIsSuccessFlash] = useState(false);
+  const [isFlashBang, setIsFlashBang] = useState(false);
   const [trackBand, setTrackBand] = useState<Band>(initialBand);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [isHittable, setIsHittable] = useState(false);
@@ -106,6 +107,7 @@ export const App = () => {
   const trackBandRef = useRef<Band>(initialBand);
   const feedbackTimeoutRef = useRef<number | null>(null);
   const keyTapTimeoutRef = useRef<number | null>(null);
+  const flashTimeoutRef = useRef<number | null>(null);
   const shakeLayerRef = useRef<HTMLDivElement>(null);
   const isHittableRef = useRef(false);
   const bandEnergyRef = useRef<Record<Band, { avg: number; last: number; lastTrigger: number }>>({
@@ -570,6 +572,14 @@ export const App = () => {
           setCombo(state.combo);
           state.hitsSinceLock += 1;
 
+          setIsFlashBang(true);
+          if (flashTimeoutRef.current) {
+            window.clearTimeout(flashTimeoutRef.current);
+          }
+          flashTimeoutRef.current = window.setTimeout(() => {
+            setIsFlashBang(false);
+          }, 160);
+
           const successAudio = successAudioRef.current;
           if (successAudio) {
             successAudio.currentTime = 0;
@@ -752,6 +762,9 @@ export const App = () => {
       if (keyTapTimeoutRef.current) {
         window.clearTimeout(keyTapTimeoutRef.current);
       }
+      if (flashTimeoutRef.current) {
+        window.clearTimeout(flashTimeoutRef.current);
+      }
       state.notes.forEach((note) => note.element?.remove());
       state.notes = [];
     };
@@ -767,6 +780,24 @@ export const App = () => {
       <audio ref={audioRef} src="/music.mp3" preload="auto" />
       <audio ref={errorAudioRef} src="/error.mp3" preload="auto" />
       <audio ref={successAudioRef} src="/success.mp3" preload="auto" />
+
+      {isFlashBang && (
+        <div
+          className="fixed inset-0 pointer-events-none"
+          style={{
+            background: 'hsl(var(--h), var(--s), var(--l))',
+            opacity: 0.15,
+            zIndex: 50,
+          }}
+        >
+          <figure
+            style={{
+              animation: 'flashBang 200ms ease-out',
+            }}
+            className="inset-0 absolute"
+          />
+        </div>
+      )}
 
       <style>{`
         @keyframes startPulse {
@@ -825,6 +856,18 @@ export const App = () => {
           100% {
             transform: scale(1);
             filter: drop-shadow(0 0 5px hsl(var(--h), var(--s), var(--l)));
+          }
+        }
+
+        @keyframes flashBang {
+          0% {
+            opacity: 0;
+          }
+          20% {
+            opacity: 0.85;
+          }
+          100% {
+            opacity: 0;
           }
         }
 
