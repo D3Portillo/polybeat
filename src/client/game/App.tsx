@@ -35,6 +35,7 @@ interface GameState {
   lastNoteId: number;
   lastSpawnTime: number;
   lastShapeChangeTime: number;
+  hitsSinceLock: number;
 }
 
 const HIT_WINDOW_MS = 480; // More lenient timing
@@ -53,7 +54,8 @@ const BPM = 120;
 const TICK_INTERVAL = 60000 / BPM / 4; // 16th note intervals for more rhythmic spawning
 const MIN_SILENCE_GAP = 250; // Minimum ms between notes
 const ENERGY_THRESHOLD = 90; // Minimum energy to spawn
-const SHAPE_LOCK_DURATION = 10_000; // Lock shape for 3 seconds
+const SHAPE_LOCK_DURATION = 15_000; // Lock shape for 15 seconds
+const REQUIRED_HITS_FOR_SHIFT = 10;
 const AVAILABLE_BANDS: Band[] = ['bass', 'mid', 'treble'];
 const CLEAR_ANIMATION_MS = 130;
 const CLEAR_ANIMATION_JITTER_MS = 50;
@@ -84,6 +86,7 @@ export const App = () => {
     lastNoteId: 0,
     lastSpawnTime: -MIN_SILENCE_GAP,
     lastShapeChangeTime: 0,
+    hitsSinceLock: 0,
   });
   const animationRef = useRef<number>(0);
   const lastTickTimeRef = useRef(0);
@@ -565,6 +568,7 @@ export const App = () => {
           state.combo++;
           setScore(state.score);
           setCombo(state.combo);
+          state.hitsSinceLock += 1;
 
           const successAudio = successAudioRef.current;
           if (successAudio) {
@@ -587,12 +591,16 @@ export const App = () => {
           explodeAndClearActiveNotes(currentTime);
 
           // After a successful hit, optionally change band
-          if (currentTime - state.lastShapeChangeTime >= SHAPE_LOCK_DURATION) {
+          if (
+            currentTime - state.lastShapeChangeTime >= SHAPE_LOCK_DURATION &&
+            state.hitsSinceLock >= REQUIRED_HITS_FOR_SHIFT
+          ) {
             const bands: Band[] = AVAILABLE_BANDS.filter(
               (band) => band !== trackBandRef.current
             ) as Band[];
             const nextBand = bands[Math.floor(Math.random() * bands.length)] ?? 'bass';
             state.lastShapeChangeTime = currentTime;
+            state.hitsSinceLock = 0;
             setTrackBandMode(nextBand);
           }
         } else {
