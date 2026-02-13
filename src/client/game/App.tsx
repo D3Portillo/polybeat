@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState, type RefObject } from 'react';
+import { Fragment, useEffect, useRef, useState, type RefObject } from 'react';
 import { context } from '@devvit/web/client';
 import confetti from 'canvas-confetti';
 import { LifeBar } from './components/LifeBar';
+import { GameOver } from './components/GameOver';
+import { Lobby } from './components/Lobby';
 
 type Shape = 'circle' | 'square' | 'triangle';
 type Band = 'bass' | 'mid' | 'treble';
@@ -104,6 +106,9 @@ export const App = () => {
   const [isFlashBang, setIsFlashBang] = useState(false);
   const [isScorePulsing, setIsScorePulsing] = useState(false);
   const [isComboPulsing, setIsComboPulsing] = useState(false);
+  const [showGameOver, setShowGameOver] = useState(false);
+  const [showLobby, setShowLobby] = useState(true);
+
   const [trackBand, setTrackBand] = useState<Band>(initialBand);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [isHittable, setIsHittable] = useState(false);
@@ -187,6 +192,40 @@ export const App = () => {
     triggerShake('miss');
   };
 
+  const resetGameState = () => {
+    const audio = audioRef.current;
+    if (audio) {
+      audio.pause();
+      audio.currentTime = 0;
+    }
+
+    stateRef.current.notes.forEach((note) => note.element?.remove());
+    stateRef.current.notes = [];
+    stateRef.current.score = 0;
+    stateRef.current.combo = 0;
+    stateRef.current.lastNoteId = 0;
+    stateRef.current.lastSpawnTime = -MIN_SILENCE_GAP;
+    stateRef.current.lastShapeChangeTime = 0;
+    stateRef.current.hitsSinceLock = 0;
+
+    setScore(0);
+    setCombo(0);
+    setIsScorePulsing(false);
+    setIsComboPulsing(false);
+    setIsSuccessFlash(false);
+    setIsFlashBang(false);
+    setIsHittable(false);
+    isHittableRef.current = false;
+
+    energyLevelRef.current = 0;
+    setEnergyLevel(0);
+
+    setTrackBandMode(initialBand);
+    setIsPlaying(false);
+    setShowGameOver(false);
+    setShowLobby(true);
+  };
+
   const handleStart = async () => {
     const audio = audioRef.current;
     if (!audio) return;
@@ -200,6 +239,7 @@ export const App = () => {
 
       await audio.play();
       setIsPlaying(true);
+      setShowGameOver(true);
       console.log('Audio started');
     } catch (error) {
       console.error('Failed to start audio:', error);
@@ -845,382 +885,10 @@ export const App = () => {
   }, [isPlaying]);
 
   return (
-    <div
-      role="button"
-      tabIndex={-1}
-      className="fixed cursor-pointer select-none group inset-0 bg-black overflow-hidden"
-      onClick={!isPlaying ? handleStart : undefined}
-    >
+    <Fragment>
       <audio ref={audioRef} src="/music.mp3" preload="auto" />
       <audio ref={errorAudioRef} src="/error.mp3" preload="auto" />
       <audio ref={successAudioRef} src="/success.mp3" preload="auto" />
-
-      {isFlashBang && (
-        <div
-          className="fixed inset-0 pointer-events-none"
-          style={{
-            background: 'hsl(var(--h), var(--s), var(--l))',
-            opacity: 0.15,
-            zIndex: 50,
-          }}
-        >
-          <figure
-            style={{
-              animation: 'flashBang 200ms ease-out',
-            }}
-            className="inset-0 absolute"
-          />
-        </div>
-      )}
-
-      <style>{`
-        @keyframes startPulse {
-          0% {
-            transform: scale(0.9);
-            opacity: 0.4;
-          }
-          50% {
-            transform: scale(1.05);
-            opacity: 1;
-          }
-          100% {
-            transform: scale(0.9);
-            opacity: 0.4;
-          }
-        }
-        @keyframes hitPop {
-          0% {
-            transform: scale(0.85);
-            opacity: 0;
-          }
-          30% {
-            transform: scale(1.2);
-            opacity: 1;
-          }
-          100% {
-            transform: scale(1);
-            opacity: 0;
-          }
-        }
-
-        @keyframes missFlash {
-          0% {
-            transform: scale(0.9);
-            opacity: 0;
-          }
-          25% {
-            transform: scale(1.05);
-            opacity: 1;
-          }
-          100% {
-            transform: scale(0.95);
-            opacity: 0;
-          }
-        }
-
-        @keyframes shapePulse {
-          0% {
-            transform: scale(1);
-            filter: drop-shadow(0 0 5px hsl(var(--h), var(--s), var(--l)));
-          }
-          50% {
-            transform: scale(1.3);
-            filter: drop-shadow(0 0 25px hsl(var(--h), var(--s), var(--l)));
-          }
-          100% {
-            transform: scale(1);
-            filter: drop-shadow(0 0 5px hsl(var(--h), var(--s), var(--l)));
-          }
-        }
-
-        @keyframes statGlitchPulse {
-          0% {
-            transform: scale(1);
-            text-shadow: none;
-            filter: none;
-          }
-          25% {
-            transform: scale(1.2) translateX(1px);
-            text-shadow: -3px 0 rgba(0,255,0,0.5), 3px 0 rgba(255,0,0,0.5);
-          }
-          45% {
-            transform: scale(1.06) translateX(-1px);
-            filter: saturate(1.5) brightness(1.15);
-          }
-          70% {
-            transform: scale(1.12) translateX(1px);
-            text-shadow: -2px 0 rgba(0,255,0,0.3), 2px 0 rgba(255,0,0,0.3);
-          }
-          100% {
-            transform: scale(1);
-            text-shadow: none;
-            filter: none;
-          }
-        }
-
-        .stat-glitch {
-          animation: statGlitchPulse 220ms ease-out;
-        }
-
-        @keyframes flashBang {
-          0% {
-            opacity: 0;
-          }
-          20% {
-            opacity: 0.85;
-          }
-          100% {
-            opacity: 0;
-          }
-        }
-
-        @keyframes trackRun {
-          0%, 100% {
-            transform: translateY(-90%);
-            opacity: 0;
-          }
-          12% {
-            opacity: 1;
-          }
-          55% {
-            opacity: 1;
-          }
-          80% {
-            transform: translateY(90%);
-            opacity: 0;
-          }
-        }
-
-        @keyframes stringFlow {
-          0% {
-            transform: translateY(0%);
-          }
-          100% {
-            transform: translateY(33.33%);
-          }
-        }
-      `}</style>
-
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          background: 'hsl(var(--h), var(--s), var(--l))',
-          opacity: 0.15,
-          filter: 'blur(20px)',
-          zIndex: -1,
-        }}
-      />
-
-      <div
-        className="absolute left-0 right-0 top-0 pointer-events-none"
-        style={{
-          height: '20vh',
-          background: 'linear-gradient(to bottom, rgba(0,0,0,0.95), rgba(0,0,0,0))',
-          zIndex: 2,
-        }}
-      />
-
-      <div
-        className="absolute z-1 bg-linear-to-b from-black/0 to-black left-0 right-0 bottom-0 pointer-events-none"
-        style={{
-          height: '15vh',
-        }}
-      />
-
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          top: '-6%',
-          transform: 'perspective(700px) rotateX(22deg) scaleY(1.12)',
-          transformOrigin: '50% 100%',
-        }}
-      >
-        <div
-          ref={shakeLayerRef}
-          className="absolute inset-0 pointer-events-none"
-          style={{ transformOrigin: '50% 60%' }}
-        >
-          <div
-            className="absolute pointer-events-none left-1/2 -translate-x-1/2"
-            style={{
-              width: `${GRID_WIDTH}px`,
-              height: '200vh',
-              top: '-100vh',
-              zIndex: 0,
-            }}
-          >
-            <div
-              style={{
-                position: 'absolute',
-                left: 0,
-                right: 0,
-                top: 0,
-                bottom: 0,
-                transform: 'perspective(800px) rotateX(18deg) scaleY(1.1)',
-                transformOrigin: '50% 100%',
-              }}
-            >
-              <div
-                className="absolute pointer-events-none"
-                style={{
-                  left: '0%',
-                  top: 0,
-                  bottom: 0,
-                  width: `${STRING_WIDTH}px`,
-                  transform: 'translateX(-50%)',
-                  boxShadow: '0 0 16px rgba(255,255,255,0.7), 0 0 30px rgba(255,255,255,0.35)',
-                  overflow: 'hidden',
-                }}
-              >
-                <div
-                  style={{
-                    position: 'absolute',
-                    left: 0,
-                    right: 0,
-                    top: '-100%',
-                    height: '300%',
-                    backgroundImage: `repeating-linear-gradient(to top, rgba(255,255,255,0.65) 0 ${STRING_CHUNK_SIZE * 1.6}px, rgba(255,255,255,0.3) ${STRING_CHUNK_SIZE * 1.6}px ${STRING_CHUNK_SIZE * 3.2}px)`,
-                    animation: 'stringFlow 1.35s linear infinite',
-                  }}
-                />
-              </div>
-              <div
-                className="absolute pointer-events-none"
-                style={{
-                  left: '100%',
-                  top: 0,
-                  bottom: 0,
-                  width: `${STRING_WIDTH}px`,
-                  transform: 'translateX(-50%)',
-                  boxShadow: '0 0 16px rgba(255,255,255,0.7), 0 0 30px rgba(255,255,255,0.35)',
-                  overflow: 'hidden',
-                }}
-              >
-                <div
-                  style={{
-                    position: 'absolute',
-                    left: 0,
-                    right: 0,
-                    top: '-100%',
-                    height: '300%',
-                    backgroundImage: `repeating-linear-gradient(to top, rgba(255,255,255,0.65) 0 ${STRING_CHUNK_SIZE * 1.6}px, rgba(255,255,255,0.3) ${STRING_CHUNK_SIZE * 1.6}px ${STRING_CHUNK_SIZE * 3.2}px)`,
-                    animation: 'stringFlow 1.35s linear infinite',
-                  }}
-                />
-              </div>
-
-              <div
-                id="track-highlighter"
-                className="absolute pointer-events-none"
-                style={{
-                  left: '50%',
-                  top: 0,
-                  bottom: 0,
-                  width: '100%',
-                  transform: 'translateX(-50%)',
-                }}
-              >
-                <div
-                  style={{
-                    position: 'absolute',
-                    left: STRING_WIDTH / 2,
-                    right: STRING_WIDTH / 2,
-                    top: '-50%',
-                    height: '150%',
-                    background:
-                      'linear-gradient(to bottom, rgba(255,255,255,0) 0%, rgba(255,255,255,0.06) 30%, rgba(255,255,255,0.30) 45%, rgba(255,255,255,0.30) 55%, rgba(255,255,255,0.06) 70%, rgba(255,255,255,0) 100%)',
-                    animation: 'trackRun 1333ms linear infinite',
-                  }}
-                />
-              </div>
-            </div>
-          </div>
-
-          <div
-            ref={containerRef}
-            id="note-container"
-            className="absolute pointer-events-none left-1/2 -translate-x-1/2"
-            style={{
-              width: `${TRACK_WIDTH}px`,
-              height: '100%',
-              transform: 'translateY(-25%)',
-              color: 'hsl(var(--h), var(--s), var(--l))',
-              zIndex: 2,
-            }}
-          />
-
-          {/* Expected shape indicator */}
-          <div
-            style={{
-              bottom: `${HIT_ZONE_OFFSET}px`,
-            }}
-            className={`group-active:scale-95 z-1 absolute left-1/2 -translate-x-1/2 transition-transform duration-100 ${
-              isKeyboardTap ? 'scale-95' : ''
-            }`}
-          >
-            <div
-              className="group-active:!bg-white/80"
-              style={{
-                width: `${EXPECTED_SHAPE_SIZE}px`,
-                height: `${EXPECTED_SHAPE_SIZE}px`,
-                transform: 'rotateX(15deg)',
-                backgroundColor:
-                  isHittable || isKeyboardTap ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.1)',
-                borderRadius: activeShape === 'circle' ? '50%' : '8px',
-                clipPath:
-                  activeShape === 'triangle' ? 'polygon(50% 0%, 0% 100%, 100% 100%)' : 'none',
-                filter: 'drop-shadow(0 0 18px rgba(255,255,255,0.65))',
-                transition: 'all 0.15s ease-out',
-              }}
-            >
-              {activeShape === 'triangle' ? (
-                <svg
-                  ref={expectedShapeRef as RefObject<SVGSVGElement>}
-                  width={EXPECTED_SHAPE_SIZE}
-                  height={EXPECTED_SHAPE_SIZE}
-                  viewBox="0 0 100 100"
-                  style={{
-                    filter: isSuccessFlash
-                      ? 'drop-shadow(0 0 20px hsl(var(--h), var(--s), var(--l)))'
-                      : 'none',
-                    transition: 'all 0.15s ease-out',
-                  }}
-                >
-                  <polygon
-                    points="50,5 5,95 95,95"
-                    fill="none"
-                    stroke={
-                      isSuccessFlash
-                        ? 'hsl(var(--h), var(--s), var(--l))'
-                        : 'rgba(255, 255, 255, 0.95)'
-                    }
-                    strokeWidth="3"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-              ) : (
-                <div
-                  ref={expectedShapeRef as RefObject<HTMLDivElement>}
-                  style={{
-                    width: `${EXPECTED_SHAPE_SIZE}px`,
-                    height: `${EXPECTED_SHAPE_SIZE}px`,
-                    backgroundColor: 'transparent',
-                    border: '3px solid',
-                    borderColor: isSuccessFlash
-                      ? 'hsl(var(--h), var(--s), var(--l))'
-                      : 'rgba(255, 255, 255, 0.95)',
-                    filter: isSuccessFlash
-                      ? 'drop-shadow(0 0 20px hsl(var(--h), var(--s), var(--l)))'
-                      : 'drop-shadow(0 0 18px rgba(255,255,255,0.6))',
-                    borderRadius: activeShape === 'circle' ? '50%' : '8px',
-                    transition: 'all 0.15s ease-out',
-                  }}
-                />
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
 
       <section
         tabIndex={-1}
@@ -1231,7 +899,7 @@ export const App = () => {
 
           alert('Menu should open here. Mock now');
         }}
-        className="absolute z-3 flex gap-2 top-4 left-4 text-white"
+        className="absolute cursor-pointer z-11 flex gap-2 top-4 left-4 text-white"
       >
         <button
           style={{
@@ -1265,59 +933,322 @@ export const App = () => {
         </div>
       </section>
 
-      <div className="absolute text-sm text-white flex gap-2 flex-col items-center z-3 top-4 right-4">
-        <div className="w-10 opacity-70 text-center">{trackBand.toUpperCase()}</div>
+      <div className="absolute text-sm text-white flex gap-2 flex-col items-center z-11 top-4 right-4">
+        <div className="w-14 opacity-70 text-center">{trackBand.toUpperCase()}</div>
         <LifeBar value={energyLevel} />
         <div className="font-bold">HP</div>
       </div>
 
-      {feedback && (
-        <div className="absolute z-3 inset-0 pointer-events-none flex items-center justify-center">
-          <div
-            key={feedback.id}
-            className={`px-6 py-3 text-3xl font-black uppercase tracking-wide ${
-              feedback.type === 'hit' ? '' : ''
-            }`}
-            style={(() => {
-              const isHit = feedback.type === 'hit';
-              const hitStyle = {
-                color: '#00ff04',
-                textShadow: '0 0 22px #00ff04',
-                animation: 'hitPop 0.45s ease-out',
-                animationFillMode: 'forwards',
-              } as const;
-              const missStyle = {
-                color: '#ff3030',
-                textShadow: '0 0 22px #ff3030',
-                animation: 'missFlash 0.45s ease-out',
-                animationFillMode: 'forwards',
-              } as const;
-              if (isHit) return hitStyle;
-              return missStyle;
-            })()}
-          >
-            {feedback.text}
-          </div>
-        </div>
+      <div
+        className="absolute left-0 right-0 top-0 pointer-events-none"
+        style={{
+          height: '20vh',
+          background: 'linear-gradient(to bottom, rgba(0,0,0,0.95), rgba(0,0,0,0))',
+          zIndex: 2,
+        }}
+      />
+
+      {showLobby && (
+        <Lobby
+          onPlay={() => {
+            setShowLobby(false);
+          }}
+        />
       )}
 
-      {!isPlaying && (
-        <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute inset-0 bg-black/40" />
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div
-              className="text-4xl font-black text-white backdrop-blur"
+      {showGameOver && (
+        <GameOver
+          onRestart={() => {
+            resetGameState();
+          }}
+        />
+      )}
+
+      <div
+        role="button"
+        tabIndex={-1}
+        className="fixed cursor-pointer select-none group inset-0 bg-black overflow-hidden"
+        onClick={isPlaying ? undefined : handleStart}
+      >
+        {isFlashBang && (
+          <div
+            className="fixed inset-0 pointer-events-none"
+            style={{
+              background: 'hsl(var(--h), var(--s), var(--l))',
+              opacity: 0.15,
+              zIndex: 50,
+            }}
+          >
+            <figure
               style={{
-                animation: 'startPulse 1.6s ease-in-out infinite',
-                padding: '12px 28px',
-                borderRadius: '16px',
+                animation: 'flashBang 200ms ease-out',
+              }}
+              className="inset-0 absolute"
+            />
+          </div>
+        )}
+
+        <div
+          data-description="color overlay for audioviz"
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            background: 'hsl(var(--h), var(--s), var(--l))',
+            opacity: 0.15,
+            filter: 'blur(20px)',
+            zIndex: -1,
+          }}
+        />
+
+        <div
+          className="absolute z-1 bg-linear-to-b from-black/0 to-black left-0 right-0 bottom-0 pointer-events-none"
+          style={{
+            height: '15vh',
+          }}
+        />
+
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            top: '-6%',
+            transform: 'perspective(700px) rotateX(22deg) scaleY(1.12)',
+            transformOrigin: '50% 100%',
+          }}
+        >
+          <div
+            ref={shakeLayerRef}
+            className="absolute inset-0 pointer-events-none"
+            style={{ transformOrigin: '50% 60%' }}
+          >
+            <div
+              className="absolute pointer-events-none left-1/2 -translate-x-1/2"
+              style={{
+                width: `${GRID_WIDTH}px`,
+                height: '200vh',
+                top: '-100vh',
+                zIndex: 0,
               }}
             >
-              START
+              <div
+                style={{
+                  position: 'absolute',
+                  left: 0,
+                  right: 0,
+                  top: 0,
+                  bottom: 0,
+                  transform: 'perspective(800px) rotateX(18deg) scaleY(1.1)',
+                  transformOrigin: '50% 100%',
+                }}
+              >
+                <div
+                  className="absolute pointer-events-none"
+                  style={{
+                    left: '0%',
+                    top: 0,
+                    bottom: 0,
+                    width: `${STRING_WIDTH}px`,
+                    transform: 'translateX(-50%)',
+                    boxShadow: '0 0 16px rgba(255,255,255,0.7), 0 0 30px rgba(255,255,255,0.35)',
+                    overflow: 'hidden',
+                  }}
+                >
+                  <div
+                    style={{
+                      position: 'absolute',
+                      left: 0,
+                      right: 0,
+                      top: '-100%',
+                      height: '300%',
+                      backgroundImage: `repeating-linear-gradient(to top, rgba(255,255,255,0.65) 0 ${STRING_CHUNK_SIZE * 1.6}px, rgba(255,255,255,0.3) ${STRING_CHUNK_SIZE * 1.6}px ${STRING_CHUNK_SIZE * 3.2}px)`,
+                      animation: 'stringFlow 1.35s linear infinite',
+                    }}
+                  />
+                </div>
+                <div
+                  className="absolute pointer-events-none"
+                  style={{
+                    left: '100%',
+                    top: 0,
+                    bottom: 0,
+                    width: `${STRING_WIDTH}px`,
+                    transform: 'translateX(-50%)',
+                    boxShadow: '0 0 16px rgba(255,255,255,0.7), 0 0 30px rgba(255,255,255,0.35)',
+                    overflow: 'hidden',
+                  }}
+                >
+                  <div
+                    style={{
+                      position: 'absolute',
+                      left: 0,
+                      right: 0,
+                      top: '-100%',
+                      height: '300%',
+                      backgroundImage: `repeating-linear-gradient(to top, rgba(255,255,255,0.65) 0 ${STRING_CHUNK_SIZE * 1.6}px, rgba(255,255,255,0.3) ${STRING_CHUNK_SIZE * 1.6}px ${STRING_CHUNK_SIZE * 3.2}px)`,
+                      animation: 'stringFlow 1.35s linear infinite',
+                    }}
+                  />
+                </div>
+
+                <div
+                  id="track-highlighter"
+                  className="absolute pointer-events-none"
+                  style={{
+                    left: '50%',
+                    top: 0,
+                    bottom: 0,
+                    width: '100%',
+                    transform: 'translateX(-50%)',
+                  }}
+                >
+                  <div
+                    style={{
+                      position: 'absolute',
+                      left: STRING_WIDTH / 2,
+                      right: STRING_WIDTH / 2,
+                      top: '-50%',
+                      height: '150%',
+                      background:
+                        'linear-gradient(to bottom, rgba(255,255,255,0) 0%, rgba(255,255,255,0.06) 30%, rgba(255,255,255,0.30) 45%, rgba(255,255,255,0.30) 55%, rgba(255,255,255,0.06) 70%, rgba(255,255,255,0) 100%)',
+                      animation: 'trackRun 1333ms linear infinite',
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div
+              ref={containerRef}
+              id="note-container"
+              className="absolute pointer-events-none left-1/2 -translate-x-1/2"
+              style={{
+                width: `${TRACK_WIDTH}px`,
+                height: '100%',
+                transform: 'translateY(-25%)',
+                color: 'hsl(var(--h), var(--s), var(--l))',
+                zIndex: 2,
+              }}
+            />
+
+            {/* Expected shape indicator */}
+            <div
+              style={{
+                bottom: `${HIT_ZONE_OFFSET}px`,
+              }}
+              className={`group-active:scale-95 z-1 absolute left-1/2 -translate-x-1/2 transition-transform duration-100 ${
+                isKeyboardTap ? 'scale-95' : ''
+              }`}
+            >
+              <div
+                className="group-active:!bg-white/80"
+                style={{
+                  width: `${EXPECTED_SHAPE_SIZE}px`,
+                  height: `${EXPECTED_SHAPE_SIZE}px`,
+                  transform: 'rotateX(15deg)',
+                  backgroundColor:
+                    isHittable || isKeyboardTap ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.1)',
+                  borderRadius: activeShape === 'circle' ? '50%' : '8px',
+                  clipPath:
+                    activeShape === 'triangle' ? 'polygon(50% 0%, 0% 100%, 100% 100%)' : 'none',
+                  filter: 'drop-shadow(0 0 18px rgba(255,255,255,0.65))',
+                  transition: 'all 0.15s ease-out',
+                }}
+              >
+                {activeShape === 'triangle' ? (
+                  <svg
+                    ref={expectedShapeRef as RefObject<SVGSVGElement>}
+                    width={EXPECTED_SHAPE_SIZE}
+                    height={EXPECTED_SHAPE_SIZE}
+                    viewBox="0 0 100 100"
+                    style={{
+                      filter: isSuccessFlash
+                        ? 'drop-shadow(0 0 20px hsl(var(--h), var(--s), var(--l)))'
+                        : 'none',
+                      transition: 'all 0.15s ease-out',
+                    }}
+                  >
+                    <polygon
+                      points="50,5 5,95 95,95"
+                      fill="none"
+                      stroke={
+                        isSuccessFlash
+                          ? 'hsl(var(--h), var(--s), var(--l))'
+                          : 'rgba(255, 255, 255, 0.95)'
+                      }
+                      strokeWidth="3"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                ) : (
+                  <div
+                    ref={expectedShapeRef as RefObject<HTMLDivElement>}
+                    style={{
+                      width: `${EXPECTED_SHAPE_SIZE}px`,
+                      height: `${EXPECTED_SHAPE_SIZE}px`,
+                      backgroundColor: 'transparent',
+                      border: '3px solid',
+                      borderColor: isSuccessFlash
+                        ? 'hsl(var(--h), var(--s), var(--l))'
+                        : 'rgba(255, 255, 255, 0.95)',
+                      filter: isSuccessFlash
+                        ? 'drop-shadow(0 0 20px hsl(var(--h), var(--s), var(--l)))'
+                        : 'drop-shadow(0 0 18px rgba(255,255,255,0.6))',
+                      borderRadius: activeShape === 'circle' ? '50%' : '8px',
+                      transition: 'all 0.15s ease-out',
+                    }}
+                  />
+                )}
+              </div>
             </div>
           </div>
         </div>
-      )}
-    </div>
+
+        {feedback && (
+          <div className="absolute z-3 inset-0 pointer-events-none flex items-center justify-center">
+            <div
+              key={feedback.id}
+              className={`px-6 py-3 text-3xl font-black uppercase tracking-wide ${
+                feedback.type === 'hit' ? '' : ''
+              }`}
+              style={(() => {
+                const isHit = feedback.type === 'hit';
+                const hitStyle = {
+                  color: '#00ff04',
+                  textShadow: '0 0 22px #00ff04',
+                  animation: 'hitPop 0.45s ease-out',
+                  animationFillMode: 'forwards',
+                } as const;
+                const missStyle = {
+                  color: '#ff3030',
+                  textShadow: '0 0 22px #ff3030',
+                  animation: 'missFlash 0.45s ease-out',
+                  animationFillMode: 'forwards',
+                } as const;
+                if (isHit) return hitStyle;
+                return missStyle;
+              })()}
+            >
+              {feedback.text}
+            </div>
+          </div>
+        )}
+
+        {isPlaying || showLobby ? null : (
+          <div className="absolute inset-0 pointer-events-none">
+            <div className="absolute inset-0 bg-black/40" />
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div
+                className="text-4xl text-center font-black text-white"
+                style={{
+                  animation: 'startPulse 1.6s ease-in-out infinite',
+                  padding: '12px 28px',
+                  borderRadius: '16px',
+                }}
+              >
+                START
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </Fragment>
   );
 };

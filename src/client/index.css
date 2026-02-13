@@ -3,3 +3,134 @@
 * {
   outline: none;
 }
+
+@keyframes startPulse {
+  0% {
+    transform: scale(0.9);
+    opacity: 0.4;
+  }
+  50% {
+    transform: scale(1.05);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.9);
+    opacity: 0.4;
+  }
+}
+@keyframes hitPop {
+  0% {
+    transform: scale(0.85);
+    opacity: 0;
+  }
+  30% {
+    transform: scale(1.2);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0;
+  }
+}
+
+@keyframes missFlash {
+  0% {
+    transform: scale(0.9);
+    opacity: 0;
+  }
+  25% {
+    transform: scale(1.05);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.95);
+    opacity: 0;
+  }
+}
+
+@keyframes shapePulse {
+  0% {
+    transform: scale(1);
+    filter: drop-shadow(0 0 5px hsl(var(--h), var(--s), var(--l)));
+  }
+  50% {
+    transform: scale(1.3);
+    filter: drop-shadow(0 0 25px hsl(var(--h), var(--s), var(--l)));
+  }
+  100% {
+    transform: scale(1);
+    filter: drop-shadow(0 0 5px hsl(var(--h), var(--s), var(--l)));
+  }
+}
+
+@keyframes statGlitchPulse {
+  0% {
+    transform: scale(1);
+    text-shadow: none;
+    filter: none;
+  }
+  25% {
+    transform: scale(1.2) translateX(1px);
+    text-shadow:
+      -3px 0 rgba(0, 255, 0, 0.5),
+      3px 0 rgba(255, 0, 0, 0.5);
+  }
+  45% {
+    transform: scale(1.06) translateX(-1px);
+    filter: saturate(1.5) brightness(1.15);
+  }
+  70% {
+    transform: scale(1.12) translateX(1px);
+    text-shadow:
+      -2px 0 rgba(0, 255, 0, 0.3),
+      2px 0 rgba(255, 0, 0, 0.3);
+  }
+  100% {
+    transform: scale(1);
+    text-shadow: none;
+    filter: none;
+  }
+}
+
+.stat-glitch {
+  animation: statGlitchPulse 220ms ease-out;
+}
+
+@keyframes flashBang {
+  0% {
+    opacity: 0;
+  }
+  20% {
+    opacity: 0.85;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes trackRun {
+  0%,
+  100% {
+    transform: translateY(-90%);
+    opacity: 0;
+  }
+  12% {
+    opacity: 1;
+  }
+  55% {
+    opacity: 1;
+  }
+  80% {
+    transform: translateY(90%);
+    opacity: 0;
+  }
+}
+
+@keyframes stringFlow {
+  0% {
+    transform: translateY(0%);
+  }
+  100% {
+    transform: translateY(33.33%);
+  }
+}
